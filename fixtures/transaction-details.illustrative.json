@@ -1,0 +1,125 @@
+{
+  "id": "6012345678901234567890",
+  "rootId": "6012345678901234567880",
+  "reconciliationId": "rec-1001",
+  "merchantId": "example_merchant",
+  "submitTimeUtc": "2024-06-07T15:04:05Z",
+  "undocumentedDetailField": {
+    "kept": true
+  },
+  "clientReferenceInformation": {
+    "code": "ORDER-1001",
+    "applicationName": "REST"
+  },
+  "buyerInformation": {
+    "merchantCustomerId": "customer-1",
+    "email": "buyer@example.com"
+  },
+  "orderInformation": {
+    "amountDetails": {
+      "totalAmount": "25.00",
+      "currency": "USD",
+      "authorizedAmount": "25.00"
+    },
+    "billTo": {
+      "firstName": "Ada",
+      "lastName": "Lovelace",
+      "email": "buyer@example.com",
+      "address1": "1 Market St",
+      "locality": "San Francisco",
+      "administrativeArea": "CA",
+      "postalCode": "94105",
+      "country": "US"
+    },
+    "shipTo": {
+      "firstName": "Ada",
+      "lastName": "Lovelace",
+      "country": "US"
+    },
+    "lineItems": [
+      {
+        "productName": "Widget",
+        "productSku": "W-1",
+        "quantity": 1,
+        "unitPrice": "25.00",
+        "taxAmount": "0.00",
+        "futureLineField": "preserved"
+      }
+    ]
+  },
+  "paymentInformation": {
+    "card": {
+      "type": "001",
+      "prefix": "411111",
+      "suffix": "1111",
+      "expirationMonth": "12",
+      "expirationYear": "2030",
+      "number": "4111111111111111",
+      "securityCode": "123"
+    },
+    "paymentType": {
+      "type": "credit card",
+      "method": "VI"
+    }
+  },
+  "processingInformation": {
+    "commerceIndicator": "internet"
+  },
+  "processorInformation": {
+    "approvalCode": "831000",
+    "responseCode": "00",
+    "avs": {
+      "code": "Y",
+      "codeRaw": "Y"
+    },
+    "cardVerification": {
+      "resultCode": "M",
+      "resultCodeRaw": "M"
+    }
+  },
+  "merchantDefinedInformation": [
+    {
+      "key": "1",
+      "value": "desk"
+    },
+    {
+      "key": "2",
+      "value": "web"
+    }
+  ],
+  "applicationInformation": {
+    "reasonCode": "100",
+    "applications": [
+      {
+        "name": "ics_auth",
+        "reasonCode": "100",
+        "rCode": "1",
+        "rFlag": "SOK",
+        "rMessage": "Request was processed successfully.",
+        "reconciliationId": "rec-1001"
+      },
+      {
+        "name": "ics_score",
+        "reasonCode": "100",
+        "rCode": "1",
+        "rFlag": "SOK"
+      },
+      {
+        "name": "ics_decision",
+        "reasonCode": "480",
+        "rCode": "0",
+        "rFlag": "DREVIEW"
+      },
+      {
+        "name": "not_a_documented_application",
+        "reasonCode": "999"
+      }
+    ]
+  },
+  "_links": {
+    "self": {
+      "href": "/tss/v2/transactions/6012345678901234567890",
+      "method": "GET"
+    }
+  }
+}

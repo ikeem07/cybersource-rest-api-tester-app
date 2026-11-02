@@ -1,0 +1,27 @@
+{
+  "name": "cybersource-rest-api-tester",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.11.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @cybersource-tester/domain build && pnpm exec concurrently -k \"pnpm --filter @cybersource-tester/server dev\" \"pnpm --filter @cybersource-tester/web dev\"",
+    "build": "pnpm --filter @cybersource-tester/domain build && pnpm --filter @cybersource-tester/server build && pnpm --filter @cybersource-tester/web build",
+    "typecheck": "pnpm --filter @cybersource-tester/domain build && pnpm --filter @cybersource-tester/server typecheck && pnpm --filter @cybersource-tester/web typecheck",
+    "test": "pnpm exec vitest run",
+    "test:coverage": "pnpm exec vitest run --coverage",
+    "test:sandbox": "CYBERSOURCE_LIVE_TESTS=true pnpm exec vitest run apps/server/tests/live",
+    "lint": "pnpm exec biome check .",
+    "start": "node apps/server/dist/index.js"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "1.9.4",
+    "@types/node": "^22.15.3",
+    "@vitest/coverage-v8": "^3.2.4",
+    "concurrently": "^9.1.2",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

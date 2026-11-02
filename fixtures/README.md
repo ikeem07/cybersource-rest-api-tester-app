@@ -1,0 +1,1 @@
+These JSON files are illustrative. They were assembled from documented Cybersource Transaction Search and Transaction Details fields so automated tests can run without merchant credentials. They were not captured from a live API response.

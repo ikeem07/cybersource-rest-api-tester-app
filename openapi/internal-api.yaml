@@ -1,0 +1,232 @@
+openapi: 3.0.3
+info:
+  title: Cybersource Transaction Inspector API
+  version: 0.1.0
+  description: |
+    Local read-only API. The server signs requests to Cybersource Transaction
+    Search. Credentials stay in server environment variables and are not part
+    of this contract. Responses keep the Cybersource payload under `cybersource`.
+    Illustrative examples are not captured live responses.
+servers:
+  - url: http://127.0.0.1:3000
+paths:
+  /api/health:
+    get:
+      operationId: getHealth
+      summary: Process health without credentials
+      responses:
+        "200":
+          description: Service is running
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, service, environment]
+                properties:
+                  ok:
+                    type: boolean
+                  service:
+                    type: string
+                  environment:
+                    type: string
+                    enum: [apitest, production, production-india]
+  /api/transactions/search:
+    post:
+      operationId: searchTransactions
+      summary: Search transactions
+      description: |
+        Builds a documented Transaction Search query and calls
+        `POST /tss/v2/searches`. `save` is always false. This operation does
+        not create payments. The server always sets timezone to America/New_York
+        and currency to USD. Date presets are resolved from searchedAt in Eastern
+        Time. submittedTo in the Cybersource query is an exclusive UTC instant.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SearchInput"
+            example:
+              dateRange: last_7_days
+              searchedAt: "2024-07-15T18:30:00Z"
+              merchantReferenceNumber: ORDER-1001
+              limit: 20
+              offset: 0
+              sort: "submitTimeUtc:desc"
+      responses:
+        "200":
+          description: Cybersource accepted the search. HTTP 201 from Cybersource is reported in httpStatus.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResult"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "502":
+          $ref: "#/components/responses/Error"
+        "504":
+          $ref: "#/components/responses/Error"
+  /api/transactions/{id}:
+    get:
+      operationId: getTransaction
+      summary: Retrieve one transaction by Cybersource request ID
+      description: |
+        Calls `GET /tss/v2/transactions/{id}`. A 404 can mean the request ID is
+        unknown or that search indexing has not finished. This API does not
+        retry that 404.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[A-Za-z0-9-]{1,64}$"
+      responses:
+        "200":
+          description: Transaction payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DetailsResult"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+        "502":
+          $ref: "#/components/responses/Error"
+        "504":
+          $ref: "#/components/responses/Error"
+components:
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+  schemas:
+    SearchInput:
+      type: object
+      additionalProperties: false
+      properties:
+        dateRange:
+          type: string
+          enum: [last_1_hour, today, yesterday, last_7_days, this_month, last_30_days, custom]
+          default: last_7_days
+        customStartDate:
+          type: string
+          format: date
+          description: Required for custom. Eastern calendar date, inclusive from midnight.
+        customEndDate:
+          type: string
+          format: date
+          description: Required for custom. Eastern calendar date, inclusive through that day.
+        searchedAt:
+          type: string
+          format: date-time
+          description: Instant when Search was clicked. Resend it unchanged for later pages.
+        merchantReferenceNumber:
+          type: string
+          description: Maps to clientReferenceInformation.code.
+        requestId:
+          type: string
+          description: Maps to the documented request id field.
+        amount:
+          type: string
+          description: Maps to orderInformation.amountDetails.totalAmount. Currency is always USD.
+        offset:
+          type: integer
+          minimum: 0
+          maximum: 100000
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+        sort:
+          type: string
+          enum:
+            - submitTimeUtc:desc
+            - submitTimeUtc:asc
+            - id:desc
+            - id:asc
+            - submitTimeUtc:desc,id:desc
+            - submitTimeUtc:asc,id:asc
+            - id:asc,submitTimeUtc:asc
+            - id:desc,submitTimeUtc:desc
+    SearchResult:
+      type: object
+      required: [httpStatus, request, cybersource, summaries]
+      properties:
+        httpStatus:
+          type: integer
+        request:
+          type: object
+          properties:
+            method:
+              type: string
+            path:
+              type: string
+            body:
+              type: object
+        cybersource:
+          description: Unmodified Cybersource JSON body.
+        summaries:
+          type: array
+          items:
+            type: object
+        totalCount:
+          type: integer
+    DetailsResult:
+      type: object
+      required: [httpStatus, request, cybersource]
+      properties:
+        httpStatus:
+          type: integer
+        request:
+          type: object
+        cybersource:
+          description: Unmodified Cybersource JSON body, including unknown fields.
+        applications:
+          type: array
+          description: Derived interpretation. The raw applications remain on cybersource.
+        settlement:
+          type: object
+          properties:
+            derived:
+              type: boolean
+            text:
+              type: string
+        lineItems:
+          type: object
+        merchantDefinedInformation:
+          type: object
+        processorChecks:
+          type: object
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, status]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            status:
+              type: integer
+            cybersourceStatus:
+              type: integer
+            details:
+              type: object

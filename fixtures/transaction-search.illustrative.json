@@ -1,0 +1,88 @@
+{
+  "searchId": "illustrative-search-id",
+  "save": false,
+  "name": "Transaction search",
+  "query": "submitTimeUtc:[2024-06-01T00:00:00Z TO 2024-06-08T00:00:00Z}",
+  "count": 2,
+  "totalCount": 42,
+  "limit": 20,
+  "offset": 0,
+  "sort": "submitTimeUtc:desc",
+  "timezone": "America/New_York",
+  "submitTimeUtc": "2024-06-08T12:00:00Z",
+  "undocumentedSearchField": "preserved",
+  "_embedded": {
+    "transactionSummaries": [
+      {
+        "id": "6012345678901234567890",
+        "submitTimeUtc": "2024-06-07T15:04:05Z",
+        "merchantId": "example_merchant",
+        "clientReferenceInformation": {
+          "code": "ORDER-1001"
+        },
+        "orderInformation": {
+          "amountDetails": {
+            "totalAmount": "25.00",
+            "currency": "USD"
+          },
+          "billTo": {
+            "email": "buyer@example.com"
+          }
+        },
+        "paymentInformation": {
+          "card": {
+            "prefix": "411111",
+            "suffix": "1111",
+            "type": "001"
+          }
+        },
+        "applicationInformation": {
+          "applications": [
+            {
+              "name": "ics_auth",
+              "reasonCode": "100",
+              "rCode": "1",
+              "rFlag": "SOK",
+              "rMessage": "Request was processed successfully.",
+              "reconciliationId": "rec-1001"
+            },
+            {
+              "name": "ics_bill",
+              "reasonCode": "100",
+              "rCode": "1",
+              "rFlag": "SOK"
+            }
+          ]
+        },
+        "exampleOnlySummaryField": "preserved"
+      },
+      {
+        "id": "6012345678901234567891",
+        "submitTimeUtc": "2024-06-06T10:00:00Z",
+        "clientReferenceInformation": {
+          "code": "ORDER-1002"
+        },
+        "orderInformation": {
+          "amountDetails": {
+            "totalAmount": "10.50",
+            "currency": "EUR"
+          }
+        },
+        "applicationInformation": {
+          "applications": [
+            {
+              "name": "ics_auth",
+              "reasonCode": "110",
+              "rCode": "1",
+              "rFlag": "SOK"
+            },
+            {
+              "name": "custom_processor_app",
+              "reasonCode": "203"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

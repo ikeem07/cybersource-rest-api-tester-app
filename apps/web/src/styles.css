@@ -1,0 +1,31 @@
+body {
+  margin: 0;
+  background: #f5f7fa;
+}
+
+.json-tree {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.json-toggle {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
+.json-children {
+  margin-left: 16px;
+}
+
+.json-key {
+  color: #0958d9;
+}
+
+.json-leaf {
+  white-space: pre-wrap;
+  word-break: break-word;
+}

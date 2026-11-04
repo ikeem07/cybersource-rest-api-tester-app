@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Express } from "express";
 import { describe, expect, it } from "vitest";
-import { createApp } from "../src/app.js";
+import { type AppOptions, createApp } from "../src/app.js";
 import type { AppConfig } from "../src/config.js";
 import { CybersourceClient, UpstreamError } from "../src/cybersource-client.js";
 import type { CybersourceGateway, CybersourceResult } from "../src/cybersource-client.js";
@@ -26,7 +26,7 @@ const minimalFixture = JSON.parse(
 describe("transaction routes", () => {
   it("sends the built search request and returns the Cybersource body unchanged", async () => {
     let received: unknown;
-    const app = createApp({
+    const app = testApp({
       environment: "apitest",
       client: {
         async search(body) {
@@ -57,15 +57,18 @@ describe("transaction routes", () => {
     expect(payload.cybersource).toEqual(searchFixture);
     expect(payload.summaries).toHaveLength(2);
     expect(payload.request.body.timezone).toBe("America/New_York");
-    expect(payload.request.body.query).toContain("clientReferenceInformation.code:ORDER-1001");
+    expect(payload.request.body.query).toContain("clientReferenceInformation.code:ABC*");
+    expect(payload.request.body.query).toContain("clientReferenceInformation.code:ABCORDER-1001");
+    expect(payload.request.body.query).not.toContain("clientReferenceInformation.code:ORDER-1001");
     expect(payload.request.body.query).toContain("orderInformation.amountDetails.currency:USD");
+    expect(payload.summaries[0]).toMatchObject({ submitTimeUtc: "2024-06-07T15:04:05Z" });
     expect(payload.request.body.query).not.toContain("applicationInformation");
     expect(received).toMatchObject({ save: false, timezone: "America/New_York" });
   });
 
   it("keeps the same Eastern window when offset changes", async () => {
     const bodies: { query?: string; offset?: number }[] = [];
-    const app = createApp({
+    const app = testApp({
       environment: "apitest",
       client: {
         async search(body) {
@@ -89,11 +92,14 @@ describe("transaction routes", () => {
       `submitTimeUtc:[${Date.parse("2024-11-03T04:00:00Z")} TO ${Date.parse("2024-11-04T05:00:00Z")}}`,
     );
     expect(bodies[1]?.offset).toBe(10);
+    expect(bodies[0]?.query).toContain("clientReferenceInformation.code:ABC*");
+    expect(bodies[1]?.query).toContain("clientReferenceInformation.code:ABC*");
+    expect(bodies[0]?.query).toContain("orderInformation.amountDetails.currency:USD");
   });
 
   it("returns an empty summary list for an empty search", async () => {
     const response = await send(
-      createApp({
+      testApp({
         environment: "apitest",
         client: gateway({ status: 201, data: emptyFixture }),
       }),
@@ -103,12 +109,89 @@ describe("transaction routes", () => {
     );
     expect(response.status).toBe(200);
     expect((response.body as { summaries: unknown[] }).summaries).toEqual([]);
+    const query = (response.body as { request: { body: { query: string } } }).request.body.query;
+    expect(query).toContain("clientReferenceInformation.code:ABC*");
+    expect(query).not.toContain("clientReferenceInformation.code:ABC AND");
+  });
+
+  it("prefixes the merchant reference on the server and keeps that filter on later pages", async () => {
+    const bodies: { query?: string; offset?: number }[] = [];
+    const app = testApp({
+      environment: "apitest",
+      client: {
+        async search(body) {
+          bodies.push(body as { query?: string; offset?: number });
+          return { status: 201, data: searchFixture };
+        },
+        async getTransaction() {
+          throw new Error("not used");
+        },
+      },
+    });
+    const criteria = {
+      dateRange: "last_7_days",
+      searchedAt: "2024-07-15T18:30:00.000Z",
+      merchantReferenceNumber: " 12345 ",
+      requestId: "6012345678901234567890",
+      amount: "25.00",
+      limit: 10,
+    };
+    await send(app, "POST", "/api/transactions/search", { ...criteria, offset: 0 });
+    await send(app, "POST", "/api/transactions/search", { ...criteria, offset: 10 });
+    expect(bodies[0]?.query).toBe(bodies[1]?.query);
+    expect(bodies[0]?.query).toContain("clientReferenceInformation.code:ABC*");
+    expect(bodies[0]?.query).toContain("clientReferenceInformation.code:ABC12345");
+    expect(bodies[0]?.query).toContain("id:6012345678901234567890");
+    expect(bodies[0]?.query).toContain("orderInformation.amountDetails.totalAmount:25.00");
+    expect(bodies[1]?.offset).toBe(10);
+    expect(bodies[0]?.query).not.toContain("ABCABC12345");
+
+    const alreadyPrefixed = await send(app, "POST", "/api/transactions/search", {
+      ...criteria,
+      merchantReferenceNumber: "ABC999",
+      offset: 0,
+    });
+    const prefixedQuery = (
+      alreadyPrefixed.body as { request: { body: { query: string; offset: number } } }
+    ).request.body;
+    expect(prefixedQuery.query).toContain("clientReferenceInformation.code:ABC999");
+    expect(prefixedQuery.query).not.toContain("ABCABC999");
+    expect(prefixedQuery.offset).toBe(0);
+
+    const otherPrefix = await send(app, "POST", "/api/transactions/search", {
+      ...criteria,
+      merchantReferenceNumber: "xyz12345",
+      offset: 20,
+    });
+    const otherQuery = (
+      otherPrefix.body as { request: { body: { query: string; offset: number } } }
+    ).request.body;
+    expect(otherQuery.query).toContain("clientReferenceInformation.code:ABCxyz12345");
+    expect(otherQuery.query).toContain("clientReferenceInformation.code:ABC*");
+    expect(otherQuery.offset).toBe(20);
+
+    const rejected = await send(app, "POST", "/api/transactions/search", {
+      merchantReferencePrefix: "ZZZ",
+    });
+    expect(rejected.status).toBe(400);
+
+    const shortPrefix = await send(
+      testApp({
+        environment: "apitest",
+        merchantReferencePrefix: "AB",
+        client: gateway({ status: 201, data: emptyFixture }),
+      }),
+      "POST",
+      "/api/transactions/search",
+      {},
+    );
+    expect(shortPrefix.status).toBe(400);
   });
 
   it("retrieves a transaction by the request ID in the path", async () => {
     let requested = "";
     const response = await send(
-      createApp({
+      testApp({
         environment: "apitest",
         client: {
           async search() {
@@ -139,7 +222,7 @@ describe("transaction routes", () => {
 
   it("accepts a minimal transaction that omits optional sections", async () => {
     const response = await send(
-      createApp({
+      testApp({
         environment: "apitest",
         client: {
           async search() {
@@ -166,7 +249,7 @@ describe("transaction routes", () => {
 
   it("does not expose credentials on the health route", async () => {
     const response = await send(
-      createApp({ environment: "apitest", client: gateway({ status: 200, data: {} }) }),
+      testApp({ environment: "apitest", client: gateway({ status: 200, data: {} }) }),
       "GET",
       "/api/health",
     );
@@ -192,6 +275,7 @@ describe("Cybersource client errors", () => {
     sharedSecret: "dGVzdC1zZWNyZXQ=",
     port: 3000,
     timeoutMs: 1000,
+    merchantReferencePrefix: "ABC",
   };
 
   it.each([
@@ -270,6 +354,17 @@ describe("client bundle", () => {
     }
   });
 });
+
+function testApp(
+  options: Omit<AppOptions, "merchantReferencePrefix"> & {
+    merchantReferencePrefix?: string;
+  },
+) {
+  return createApp({
+    ...options,
+    merchantReferencePrefix: options.merchantReferencePrefix ?? "ABC",
+  });
+}
 
 function gateway(result: CybersourceResult): CybersourceGateway {
   return {

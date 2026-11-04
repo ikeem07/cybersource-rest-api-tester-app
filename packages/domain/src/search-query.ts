@@ -6,6 +6,10 @@ import {
   resolveSearchDateRange,
 } from "./date-range.js";
 import { ValidationError } from "./errors.js";
+import {
+  merchantReferencePrefixClause,
+  resolveMerchantReferenceNumber,
+} from "./merchant-reference.js";
 
 export interface SearchInput {
   dateRange: DateRangePreset;
@@ -34,6 +38,10 @@ export interface BuiltSearch {
   body: CybersourceSearchBody;
   submittedFrom: string;
   submittedTo: string;
+}
+
+export interface SearchBuildOptions {
+  merchantReferencePrefix: string;
 }
 
 const ALLOWED_KEYS = new Set([
@@ -106,7 +114,7 @@ export function parseSearchInput(value: unknown): SearchInput {
   };
 }
 
-export function buildSearchRequest(input: SearchInput): BuiltSearch {
+export function buildSearchRequest(input: SearchInput, options: SearchBuildOptions): BuiltSearch {
   const range = resolveSearchDateRange({
     preset: input.dateRange,
     now: new Date(input.searchedAt),
@@ -115,11 +123,13 @@ export function buildSearchRequest(input: SearchInput): BuiltSearch {
   });
   // Absolute ISO timestamps fail date parsing on this API. Epoch milliseconds are accepted.
   const clauses = [`submitTimeUtc:[${range.start.getTime()} TO ${range.end.getTime()}}`];
-
-  if (input.merchantReferenceNumber) {
-    clauses.push(
-      `clientReferenceInformation.code:${quoteQueryValue(input.merchantReferenceNumber)}`,
-    );
+  const merchantReferenceNumber = resolveMerchantReferenceNumber(
+    input.merchantReferenceNumber,
+    options.merchantReferencePrefix,
+  );
+  clauses.push(merchantReferencePrefixClause(options.merchantReferencePrefix));
+  if (merchantReferenceNumber) {
+    clauses.push(`clientReferenceInformation.code:${quoteQueryValue(merchantReferenceNumber)}`);
   }
   if (input.requestId) {
     if (!/^[A-Za-z0-9]+$/.test(input.requestId)) {

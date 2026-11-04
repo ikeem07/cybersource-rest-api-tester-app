@@ -16,7 +16,8 @@ describe.skipIf(!enabled)("sandbox smoke", () => {
     const result = await client.search({
       save: false,
       name: "Transaction search",
-      query: "submitTimeUtc:[NOW/DAY-1DAY TO NOW/DAY+1DAY}",
+      timezone: "America/New_York",
+      query: `submitTimeUtc:[NOW/DAY-1DAY TO NOW/DAY+1DAY} AND clientReferenceInformation.code:${config.merchantReferencePrefix}*`,
       offset: 0,
       limit: 1,
       sort: "submitTimeUtc:desc",

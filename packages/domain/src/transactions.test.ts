@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import {
   ValidationError,
   buildSearchRequest,
+  formatEasternDateTime,
   interpretApplications,
   parseSearchInput,
   readLineItems,
@@ -20,29 +21,38 @@ function load(name: string): unknown {
 }
 
 const SEARCHED_AT = "2024-07-15T18:30:00.000Z";
+const PREFIX = "ABC";
+
+function build(value: unknown) {
+  return buildSearchRequest(parseSearchInput(value), { merchantReferencePrefix: PREFIX });
+}
+
+function referenceClauses(query: string): string[] {
+  return query
+    .split(" AND ")
+    .filter((clause) => clause.startsWith("clientReferenceInformation.code:"));
+}
 
 describe("transaction search query", () => {
   it("builds a documented query in Eastern Time and restricts currency to USD", () => {
-    const built = buildSearchRequest(
-      parseSearchInput({
-        dateRange: "custom",
-        customStartDate: "2024-06-01",
-        customEndDate: "2024-06-07",
-        searchedAt: SEARCHED_AT,
-        merchantReferenceNumber: "ORDER-1001",
-        requestId: "6012345678901234567890",
-        amount: "25.00",
-        offset: 20,
-        limit: 10,
-        sort: "id:asc,submitTimeUtc:asc",
-      }),
-    );
+    const built = build({
+      dateRange: "custom",
+      customStartDate: "2024-06-01",
+      customEndDate: "2024-06-07",
+      searchedAt: SEARCHED_AT,
+      merchantReferenceNumber: "ORDER-1001",
+      requestId: "6012345678901234567890",
+      amount: "25.00",
+      offset: 20,
+      limit: 10,
+      sort: "id:asc,submitTimeUtc:asc",
+    });
 
     expect(built.body).toEqual({
       save: false,
       name: "Transaction search",
       timezone: "America/New_York",
-      query: `submitTimeUtc:[${Date.parse("2024-06-01T04:00:00Z")} TO ${Date.parse("2024-06-08T04:00:00Z")}} AND clientReferenceInformation.code:ORDER-1001 AND id:6012345678901234567890 AND orderInformation.amountDetails.totalAmount:25.00 AND orderInformation.amountDetails.currency:USD`,
+      query: `submitTimeUtc:[${Date.parse("2024-06-01T04:00:00Z")} TO ${Date.parse("2024-06-08T04:00:00Z")}} AND clientReferenceInformation.code:ABC* AND clientReferenceInformation.code:ABCORDER-1001 AND id:6012345678901234567890 AND orderInformation.amountDetails.totalAmount:25.00 AND orderInformation.amountDetails.currency:USD`,
       offset: 20,
       limit: 10,
       sort: "id:asc,submitTimeUtc:asc",
@@ -51,55 +61,95 @@ describe("transaction search query", () => {
   });
 
   it("quotes unsafe reference values and still forces USD", () => {
-    const built = buildSearchRequest(
-      parseSearchInput({
-        dateRange: "last_1_hour",
-        searchedAt: SEARCHED_AT,
-        merchantReferenceNumber: "order 100",
-      }),
-    );
+    const built = build({
+      dateRange: "last_1_hour",
+      searchedAt: SEARCHED_AT,
+      merchantReferenceNumber: "order 100",
+    });
     expect(built.body.query).toBe(
-      `submitTimeUtc:[${Date.parse("2024-07-15T17:30:00Z")} TO ${Date.parse("2024-07-15T18:30:00Z")}} AND clientReferenceInformation.code:"order 100" AND orderInformation.amountDetails.currency:USD`,
+      `submitTimeUtc:[${Date.parse("2024-07-15T17:30:00Z")} TO ${Date.parse("2024-07-15T18:30:00Z")}} AND clientReferenceInformation.code:ABC* AND clientReferenceInformation.code:"ABCorder 100" AND orderInformation.amountDetails.currency:USD`,
     );
     expect(built.body.timezone).toBe("America/New_York");
   });
 
-  it("preserves the original Eastern date boundaries when the page changes", () => {
-    const first = buildSearchRequest(
-      parseSearchInput({
-        dateRange: "last_7_days",
-        searchedAt: SEARCHED_AT,
-        offset: 0,
-        limit: 20,
-        sort: "submitTimeUtc:asc",
-      }),
-    );
-    const second = buildSearchRequest(
-      parseSearchInput({
-        dateRange: "last_7_days",
-        searchedAt: SEARCHED_AT,
-        offset: 20,
-        limit: 20,
-        sort: "submitTimeUtc:asc",
-      }),
-    );
-    expect(second.body.query).toBe(first.body.query);
-    expect(second.body.query).toContain(
+  it("preserves the original Eastern date boundaries and prefix filter when the page changes", () => {
+    const first = build({
+      dateRange: "last_7_days",
+      searchedAt: SEARCHED_AT,
+      offset: 0,
+      limit: 20,
+      sort: "submitTimeUtc:asc",
+    });
+    const second = build({
+      dateRange: "last_7_days",
+      searchedAt: SEARCHED_AT,
+      merchantReferenceNumber: "12345",
+      offset: 20,
+      limit: 20,
+      sort: "submitTimeUtc:asc",
+    });
+    const samePage = build({
+      dateRange: "last_7_days",
+      searchedAt: SEARCHED_AT,
+      offset: 20,
+      limit: 20,
+      sort: "submitTimeUtc:asc",
+    });
+    expect(samePage.body.query).toBe(first.body.query);
+    expect(samePage.body.query).toContain(
       `submitTimeUtc:[${Date.parse("2024-07-08T18:30:00Z")} TO ${Date.parse("2024-07-15T18:30:00Z")}}`,
     );
+    expect(referenceClauses(samePage.body.query)).toEqual(["clientReferenceInformation.code:ABC*"]);
+    expect(referenceClauses(second.body.query)).toEqual([
+      "clientReferenceInformation.code:ABC*",
+      "clientReferenceInformation.code:ABC12345",
+    ]);
     expect(second.body.offset).toBe(20);
     expect(second.body.timezone).toBe("America/New_York");
     expect(second.body.query).toContain("orderInformation.amountDetails.currency:USD");
     expect(second.body.query).not.toContain("applicationInformation");
   });
 
-  it("defaults an empty request to the last 7 Eastern days and USD", () => {
-    const built = buildSearchRequest(parseSearchInput({ searchedAt: SEARCHED_AT }));
+  it("defaults an empty request to the last 7 Eastern days, the prefix, and USD", () => {
+    const built = build({ searchedAt: SEARCHED_AT });
     expect(built.body.save).toBe(false);
     expect(built.body.timezone).toBe("America/New_York");
     expect(built.body.query).toBe(
-      `submitTimeUtc:[${Date.parse("2024-07-08T18:30:00Z")} TO ${Date.parse("2024-07-15T18:30:00Z")}} AND orderInformation.amountDetails.currency:USD`,
+      `submitTimeUtc:[${Date.parse("2024-07-08T18:30:00Z")} TO ${Date.parse("2024-07-15T18:30:00Z")}} AND clientReferenceInformation.code:ABC* AND orderInformation.amountDetails.currency:USD`,
     );
+    expect(built.body.sort).toBe("submitTimeUtc:desc");
+  });
+
+  it("applies the prefix on the server and ignores a client-supplied prefix field", () => {
+    expect(
+      referenceClauses(
+        build({ searchedAt: SEARCHED_AT, merchantReferenceNumber: "XYZ12345" }).body.query,
+      ),
+    ).toEqual([
+      "clientReferenceInformation.code:ABC*",
+      "clientReferenceInformation.code:ABCXYZ12345",
+    ]);
+    expect(
+      referenceClauses(
+        build({ searchedAt: SEARCHED_AT, merchantReferenceNumber: "ABC12345" }).body.query,
+      ),
+    ).toEqual(["clientReferenceInformation.code:ABC*", "clientReferenceInformation.code:ABC12345"]);
+    expect(
+      referenceClauses(
+        build({ searchedAt: SEARCHED_AT, merchantReferenceNumber: " abc12345 " }).body.query,
+      ),
+    ).toEqual([
+      "clientReferenceInformation.code:ABC*",
+      "clientReferenceInformation.code:ABCabc12345",
+    ]);
+    expect(() => parseSearchInput({ merchantReferencePrefix: "ZZZ" })).toThrow(
+      /Unsupported search field/,
+    );
+    expect(() =>
+      buildSearchRequest(parseSearchInput({ searchedAt: SEARCHED_AT }), {
+        merchantReferencePrefix: "AB",
+      }),
+    ).toThrow(ValidationError);
   });
 
   it("rejects status, currency, application, and timezone as search fields", () => {
@@ -119,12 +169,21 @@ describe("transaction search responses", () => {
     expect(rows).toHaveLength(2);
     expect(rows[0]).toMatchObject({
       id: "6012345678901234567890",
+      submitTimeUtc: "2024-06-07T15:04:05Z",
       merchantReferenceNumber: "ORDER-1001",
       amount: "25.00",
       currency: "USD",
       email: "buyer@example.com",
       applications: ["ics_auth", "ics_bill"],
     });
+    expect(formatEasternDateTime(rows[0]?.submitTimeUtc)).toBe("06/07/2024 11:04:05 AM EDT");
+    const byTimestamp = [...rows].sort((left, right) =>
+      (left.submitTimeUtc ?? "").localeCompare(right.submitTimeUtc ?? ""),
+    );
+    expect(byTimestamp.map((row) => row.submitTimeUtc)).toEqual([
+      "2024-06-06T10:00:00Z",
+      "2024-06-07T15:04:05Z",
+    ]);
     expect(rows[1]?.email).toBeUndefined();
     expect(rows[1]?.applications).toEqual(["ics_auth", "custom_processor_app"]);
     expect(rows[0]?.source.exampleOnlySummaryField).toBe("preserved");

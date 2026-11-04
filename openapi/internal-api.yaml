@@ -40,6 +40,11 @@ paths:
         not create payments. The server always sets timezone to America/New_York
         and currency to USD. Date presets are resolved from searchedAt in Eastern
         Time. submittedTo in the Cybersource query is an exclusive UTC instant.
+        Every search ANDs `clientReferenceInformation.code:<prefix>*`, where
+        `<prefix>` is `CYBERSOURCE_MERCHANT_REFERENCE_PREFIX` from the server
+        environment. The request body cannot set or remove that prefix. A
+        merchantReferenceNumber is trimmed and, when it does not already start
+        with the prefix, the prefix is prepended before the exact-match clause.
       requestBody:
         required: true
         content:
@@ -137,7 +142,10 @@ components:
           description: Instant when Search was clicked. Resend it unchanged for later pages.
         merchantReferenceNumber:
           type: string
-          description: Maps to clientReferenceInformation.code.
+          description: |
+            Maps to clientReferenceInformation.code. The server trims the value
+            and prepends CYBERSOURCE_MERCHANT_REFERENCE_PREFIX when the value
+            does not already start with that prefix. Comparison is case-sensitive.
         requestId:
           type: string
           description: Maps to the documented request id field.

@@ -10,6 +10,7 @@ function baseEnv(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
     CYBERSOURCE_KEY_ID: "key-id",
     CYBERSOURCE_SHARED_SECRET: secret,
     CYBERSOURCE_BASE_URL: "https://apitest.cybersource.com",
+    CYBERSOURCE_MERCHANT_REFERENCE_PREFIX: "ABC",
     PORT: "3000",
     ...overrides,
   };
@@ -57,6 +58,23 @@ describe("configuration", () => {
       }),
     );
     expect(india.host).toBe("api.in.cybersource.com");
+  });
+
+  it("requires a merchant reference prefix of at least three letters or digits", () => {
+    expect(loadConfig(baseEnv()).merchantReferencePrefix).toBe("ABC");
+    expect(
+      loadConfig(baseEnv({ CYBERSOURCE_MERCHANT_REFERENCE_PREFIX: " ABC " }))
+        .merchantReferencePrefix,
+    ).toBe("ABC");
+    expect(() => loadConfig(baseEnv({ CYBERSOURCE_MERCHANT_REFERENCE_PREFIX: undefined }))).toThrow(
+      /CYBERSOURCE_MERCHANT_REFERENCE_PREFIX/,
+    );
+    expect(() => loadConfig(baseEnv({ CYBERSOURCE_MERCHANT_REFERENCE_PREFIX: "AB" }))).toThrow(
+      ConfigError,
+    );
+    expect(() => loadConfig(baseEnv({ CYBERSOURCE_MERCHANT_REFERENCE_PREFIX: "AB*" }))).toThrow(
+      /trailing wildcard/,
+    );
   });
 
   it("rejects an environment that does not match the base URL", () => {

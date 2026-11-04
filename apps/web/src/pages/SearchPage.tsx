@@ -4,6 +4,7 @@ import {
   REASON_OUTCOME_LABELS,
   type SearchInput,
   type SummaryRow,
+  formatEasternDateTime,
   interpretApplicationName,
   interpretReasonCode,
   isRecord,
@@ -78,7 +79,7 @@ export function SearchPage() {
     {
       title: "Transaction Date",
       dataIndex: "submitTimeUtc",
-      render: (value: string | undefined) => value ?? <Missing />,
+      render: (value: string | undefined) => formatEasternDateTime(value) ?? <Missing />,
     },
     {
       title: "Request ID",
@@ -139,9 +140,10 @@ export function SearchPage() {
         <Typography.Title level={3}>Transaction Search</Typography.Title>
         <Typography.Paragraph>
           Calls <Typography.Text code>POST /tss/v2/searches</Typography.Text> through the local API.
-          Every search uses America/New_York and USD. Relative ranges are calculated when you click
-          Search, and paging keeps those boundaries. Transaction status and application name are not
-          search fields.
+          Every search uses America/New_York and USD, and Cybersource returns only merchant
+          references that start with the configured prefix. Relative ranges are calculated when you
+          click Search, and paging keeps those boundaries. Transaction dates in the table are
+          Eastern Time. Transaction status and application name are not search fields.
         </Typography.Paragraph>
       </div>
       <Card>
@@ -202,7 +204,11 @@ export function SearchPage() {
             >
               <DatePicker />
             </Form.Item>
-            <Form.Item label="Merchant reference number" name="merchantReferenceNumber">
+            <Form.Item
+              label="Merchant reference number"
+              name="merchantReferenceNumber"
+              extra="If this value does not already start with the configured prefix, the server adds it. Matching is case-sensitive."
+            >
               <Input allowClear placeholder="clientReferenceInformation.code" />
             </Form.Item>
             <Form.Item label="Request ID" name="requestId">

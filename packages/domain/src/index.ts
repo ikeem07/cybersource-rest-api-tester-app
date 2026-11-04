@@ -19,10 +19,17 @@ export {
   easternMidnight,
   easternParts,
   easternWallTimeToUtc,
+  formatEasternDateTime,
   formatUtcInstant,
 } from "./eastern-time.js";
 export type { EasternParts } from "./eastern-time.js";
 export { ValidationError } from "./errors.js";
+export {
+  assertMerchantReferencePrefix,
+  MERCHANT_REFERENCE_PREFIX_PATTERN,
+  merchantReferencePrefixClause,
+  resolveMerchantReferenceNumber,
+} from "./merchant-reference.js";
 export { getRecord, isRecord, readPath, readString } from "./objects.js";
 export {
   interpretReasonCode,
@@ -44,6 +51,11 @@ export {
 export type { CollectionView, InterpretedApplication, SummaryRow } from "./response.js";
 export { sanitize } from "./sanitize.js";
 export { buildSearchRequest, parseSearchInput, parseTransactionId } from "./search-query.js";
-export type { BuiltSearch, CybersourceSearchBody, SearchInput } from "./search-query.js";
+export type {
+  BuiltSearch,
+  CybersourceSearchBody,
+  SearchBuildOptions,
+  SearchInput,
+} from "./search-query.js";
 export { SUPPORTED_TIME_ZONES, isSupportedTimeZone } from "./time-zones.js";
 export type { SupportedTimeZone } from "./time-zones.js";

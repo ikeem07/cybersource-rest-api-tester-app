@@ -22,6 +22,7 @@ const staticDir = path.resolve(root, "apps/web/dist");
 const app = createApp({
   client: new CybersourceClient(config),
   environment: config.environment,
+  merchantReferencePrefix: config.merchantReferencePrefix,
   staticDir: existsSync(staticDir) ? staticDir : undefined,
 });
 

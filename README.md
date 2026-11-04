@@ -38,6 +38,7 @@ Fill in `.env.local`. The API and the Vite dev server read `.env.local` and then
 | `CYBERSOURCE_KEY_ID` | yes | REST shared-secret key ID. |
 | `CYBERSOURCE_SHARED_SECRET` | yes | Base64 shared secret from the Business Center. Do not decode it first. |
 | `CYBERSOURCE_BASE_URL` | yes in the example | Must match the environment: `https://apitest.cybersource.com`, `https://api.cybersource.com`, or `https://api.in.cybersource.com`. |
+| `CYBERSOURCE_MERCHANT_REFERENCE_PREFIX` | yes | Letters or digits, 3 to 100 characters. Every search is limited to merchant reference numbers that start with this value. |
 | `PORT` | no | Local API port. Default `3000`. |
 | `CYBERSOURCE_TIMEOUT_MS` | no | Upstream timeout from 1000 to 180000. Default `120000`. |
 | `CYBERSOURCE_LIVE_TESTS` | no | Set to `true` only for the optional sandbox smoke test. |
@@ -96,10 +97,15 @@ Open **Transaction Search**. The date-range dropdown defaults to **Last 7 Days**
 
 Every search sets `timezone` to `America/New_York` and adds `orderInformation.amountDetails.currency:USD`. The documented bracket form `currency:[USD]` is a range expression, and Transaction Search rejects it. Currency and application are not filters. The results table still shows currency and applications when Cybersource returns them. Relative ranges are calculated in Eastern Time when Search is clicked, including EST/EDT. The query sends those bounds as UTC epoch milliseconds because this API rejects ISO-8601 timestamps in `submitTimeUtc`. The end is exclusive. Paging resends that same `searchedAt` instant, so the window does not move between pages.
 
+Every search also adds `clientReferenceInformation.code:<prefix>*`. `<prefix>` is `CYBERSOURCE_MERCHANT_REFERENCE_PREFIX` from the server environment. The browser cannot change it. Transaction Search expresses a prefix with a trailing wildcard, and that wildcard must have at least three characters before `*`. A prefix shorter than three characters, or one that contains anything other than letters and digits, is rejected at startup. The app does not drop rows in the browser after Cybersource returns them, because `offset`, `limit`, and `totalCount` belong to the query Cybersource already ran.
+
+When the merchant reference field has a value, the server trims it and prepends the prefix if the value does not already start with that prefix. The check is case-sensitive. `12345` with prefix `ABC` is searched as `ABC12345`. `ABC12345` stays `ABC12345`. `XYZ12345` becomes `ABCXYZ12345`. An empty field adds no exact reference, and the prefix wildcard still applies. The exact value is ANDed with the wildcard, the date range, and any request ID or amount.
+
 | Filter | Query field |
 | --- | --- |
 | Date range | `submitTimeUtc:[startMillis TO endMillis}` with an exclusive end |
-| Merchant reference number | `clientReferenceInformation.code` |
+| Merchant reference prefix | Always `clientReferenceInformation.code:<prefix>*` |
+| Merchant reference number | `clientReferenceInformation.code` after the prefix rule above |
 | Request ID | `id` |
 | Amount | `orderInformation.amountDetails.totalAmount` |
 | Currency | Always `orderInformation.amountDetails.currency:USD` |
@@ -109,6 +115,8 @@ Every search sets `timezone` to `America/New_York` and adds `orderInformation.am
 Transaction status and application name are not documented as filters on this screen. `save` is always `false`, so this tester does not create a saved search on the merchant account.
 
 The results table shows transaction date, request ID, merchant reference number, amount, currency, applications, and email when those values are present. A missing value is marked “Not returned”. Choose a request ID to open Transaction Details. **Raw JSON** shows the Cybersource body, including fields this UI does not have a column for.
+
+The Transaction Date column formats `submitTimeUtc` in `America/New_York` as `MM/DD/YYYY hh:mm:ss AM/PM` followed by `EST` or `EDT`. The zone follows Eastern Standard Time and Eastern Daylight Time. The browser timezone is not used. The row still holds the original UTC timestamp from Cybersource, and sorting still sends `submitTimeUtc`. A missing or invalid timestamp stays “Not returned”.
 
 ## Retrieving transaction details
 
@@ -177,6 +185,7 @@ These are differences between sources, or between the docs and this tester. They
 - The search example shows `"save": "save"`. That value is not a boolean and reads as a placeholder. API usage elsewhere treats `save` as a boolean. This tester always sends `false`.
 - The query-field list’s request-ID row lost its field name in the rendered docs. The description matches the platform request ID, and search summaries use `id`, so the filter is sent as `id`.
 - Transaction status is not in the supported query-field list. Application name is searchable in the API (`applicationInformation.applications.name`), and this tester does not send it. The currency example `orderInformation.amountDetails.currency:[USD]` is rejected by the query parser; this tester sends `orderInformation.amountDetails.currency:USD`. `submitTimeUtc` ranges use UTC epoch milliseconds. Search requests send `Accept: application/json`. Transaction details keep `Accept: application/hal+json;charset=utf-8`.
+- Prefix matching on `clientReferenceInformation.code` uses a trailing wildcard, for example `clientReferenceInformation.code:ABC*`. The [search best practices](https://developer.cybersource.com/docs/cybs/en-us/txn-search/developer/all/rest/txn-search/txn-best-practice.html) require at least three characters before `*`. Accepted examples include `123*` and `ABCD*`. Unsupported examples include `*ABC`, `A*`, `AB*`, and `12*`. This tester requires the configured prefix to satisfy that rule and sends the wildcard from the server on every search. Orbit still does not index `POST /tss/v2/searches`, so this syntax comes from the Transaction Search guide.
 - The services table calls `ics_score` “Advanced Fraud Screen”, `ics_auth_reversal` “Card Full Authorization Reversal”, and `ics_dcc` “DCC Lookup”. The screen uses Fraud Screening, Authorization Reversal, and Dynamic Currency Conversion Lookup, and it shows the services-table name when the wording differs.
 - Reason-code text comes from the [Simple Order reason code reference](https://developer.cybersource.com/docs/cybs/en-us/reason-codes-so/reference/all/so/reason-codes-so/reason-codes-so.html). Transaction Search returns those numbers on applications. A separate REST-only reason-code catalog for TSS was not found.
 - AVS descriptions are from [AVS Codes for Other Processors](https://developer.cybersource.com/docs/cybs/en-us/avs-codes/reference/all/na/avs-codes/avs-codes-intro/avs-codes-other-processors.html), which is the general table linked from the AVS introduction. Visa Platform Connect can return a different processor-specific set in `codeRaw`.
@@ -188,6 +197,7 @@ These are differences between sources, or between the docs and this tester. They
 - [Transaction Search and Details API](https://developer.cybersource.com/docs/cybs/en-us/txn-search/developer/all/rest/txn-search.html)
 - [Creating a search request](https://developer.cybersource.com/docs/cybs/en-us/txn-search/developer/all/rest/txn-search/txn-search-intro/txn-search-request.html)
 - [Filtering by query parameter](https://developer.cybersource.com/docs/cybs/en-us/txn-search/developer/all/rest/txn-search/txn-search-intro/txn-filtering.html)
+- [Best practices for implementing searches](https://developer.cybersource.com/docs/cybs/en-us/txn-search/developer/all/rest/txn-search/txn-best-practice.html)
 - [submitTimeUtc filtering](https://developer.cybersource.com/docs/cybs/en-us/txn-search/developer/all/rest/txn-search/txn-search-intro/txn-filtering/txn-search-filter-submitTimeUtc.html)
 - [API reference](https://developer.cybersource.com/api/reference/api-reference.html)
 - [AVS codes](https://developer.cybersource.com/docs/cybs/en-us/avs-codes/reference/all/na/avs-codes/avs-codes-intro.html)

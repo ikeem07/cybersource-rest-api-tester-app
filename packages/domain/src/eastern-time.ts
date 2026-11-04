@@ -1,4 +1,4 @@
-/** Wall-clock arithmetic for America/New_York. Does not use the host timezone. */
+/** Wall-clock arithmetic and display for America/New_York. Does not use the host timezone. */
 export const EASTERN_TIME_ZONE = "America/New_York";
 
 export interface EasternParts {
@@ -105,6 +105,93 @@ export function addEasternCalendarDays(instant: Date, days: number): Date {
 
 export function formatUtcInstant(instant: Date): string {
   return instant.toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
+const DISPLAY_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  timeZone: EASTERN_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: true,
+  timeZoneName: "short",
+});
+
+/**
+ * Format an instant as `MM/DD/YYYY hh:mm:ss AM/PM EST|EDT` in America/New_York.
+ * Returns undefined for missing or unparseable values. Does not modify the input.
+ */
+export function formatEasternDateTime(value: Date | string | null | undefined): string | undefined {
+  const instant = value instanceof Date ? validInstant(value) : parseUtcInstant(value);
+  if (!instant) {
+    return undefined;
+  }
+  const bag: Record<string, string> = {};
+  for (const part of DISPLAY_FORMATTER.formatToParts(instant)) {
+    if (part.type !== "literal") {
+      bag[part.type] = part.value;
+    }
+  }
+  const month = twoDigits(bag.month);
+  const day = twoDigits(bag.day);
+  const year = bag.year;
+  const hour = twoDigits(bag.hour);
+  const minute = twoDigits(bag.minute);
+  const second = twoDigits(bag.second);
+  const dayPeriod = normalizeDayPeriod(bag.dayPeriod);
+  const zone = easternAbbreviation(bag.timeZoneName);
+  if (!month || !day || !year || !hour || !minute || !second || !dayPeriod || !zone) {
+    return undefined;
+  }
+  return `${month}/${day}/${year} ${hour}:${minute}:${second} ${dayPeriod} ${zone}`;
+}
+
+function parseUtcInstant(value: string | null | undefined): Date | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const withZone = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(trimmed)
+    ? `${trimmed}Z`
+    : trimmed;
+  return validInstant(new Date(withZone));
+}
+
+function validInstant(instant: Date): Date | undefined {
+  return Number.isNaN(instant.getTime()) ? undefined : instant;
+}
+
+function twoDigits(value: string | undefined): string | undefined {
+  if (!value || !/^\d{1,2}$/.test(value)) {
+    return undefined;
+  }
+  return value.padStart(2, "0");
+}
+
+function normalizeDayPeriod(value: string | undefined): "AM" | "PM" | undefined {
+  const period = value?.replace(/\./g, "").toUpperCase();
+  if (period === "AM" || period === "PM") {
+    return period;
+  }
+  return undefined;
+}
+
+function easternAbbreviation(value: string | undefined): "EST" | "EDT" | undefined {
+  if (value === "EST" || value === "EDT") {
+    return value;
+  }
+  if (value === "GMT-5" || value === "UTC-5") {
+    return "EST";
+  }
+  if (value === "GMT-4" || value === "UTC-4") {
+    return "EDT";
+  }
+  return undefined;
 }
 
 function offsetMs(instant: Date): number {

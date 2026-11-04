@@ -19,6 +19,7 @@ import { type CybersourceGateway, UpstreamError } from "./cybersource-client.js"
 export interface AppOptions {
   readonly client: CybersourceGateway;
   readonly environment: string;
+  readonly merchantReferencePrefix: string;
   readonly staticDir?: string;
 }
 
@@ -37,7 +38,9 @@ export function createApp(options: AppOptions): Express {
 
   app.post("/api/transactions/search", async (request, response, next) => {
     try {
-      const built = buildSearchRequest(parseSearchInput(request.body));
+      const built = buildSearchRequest(parseSearchInput(request.body), {
+        merchantReferencePrefix: options.merchantReferencePrefix,
+      });
       const result = await options.client.search(built.body);
       response.status(200).json({
         httpStatus: result.status,

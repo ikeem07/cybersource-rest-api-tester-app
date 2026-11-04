@@ -1,3 +1,5 @@
+import { MERCHANT_REFERENCE_PREFIX_PATTERN } from "@cybersource-tester/domain";
+
 export type CybersourceEnvironment = "apitest" | "production" | "production-india";
 
 export interface AppConfig {
@@ -9,6 +11,7 @@ export interface AppConfig {
   readonly sharedSecret: string;
   readonly port: number;
   readonly timeoutMs: number;
+  readonly merchantReferencePrefix: string;
 }
 
 const CANONICAL_URLS: Record<CybersourceEnvironment, string> = {
@@ -76,11 +79,24 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     sharedSecret,
     port: readPort(source.PORT),
     timeoutMs: readTimeout(source.CYBERSOURCE_TIMEOUT_MS),
+    merchantReferencePrefix: readMerchantReferencePrefix(
+      source.CYBERSOURCE_MERCHANT_REFERENCE_PREFIX,
+    ),
   };
 }
 
 function readRequired(value: string | undefined): string {
   return value?.trim() ?? "";
+}
+
+function readMerchantReferencePrefix(value: string | undefined): string {
+  const prefix = value?.trim() ?? "";
+  if (!MERCHANT_REFERENCE_PREFIX_PATTERN.test(prefix)) {
+    throw new ConfigError(
+      "CYBERSOURCE_MERCHANT_REFERENCE_PREFIX must be 3 to 100 letters or digits. Transaction Search matches a prefix with a trailing wildcard, and that wildcard needs at least three characters before it.",
+    );
+  }
+  return prefix;
 }
 
 function readPort(value: string | undefined): number {
